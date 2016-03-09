@@ -1,0 +1,3 @@
+#!/bin/bash
+
+yasm -m amd64 -o test test.asm && hexdump -C test
