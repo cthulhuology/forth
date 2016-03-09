@@ -165,7 +165,6 @@ ICODE c@+ ( addr -- a+1 n )
 	16 * opcodes + dup 4+ swap @	\ addr len
 	0 do c@+ c, loop ;
 
-
 \ patches the last byte
 : patch1 ( c -- )
 	here 1 - ! ;

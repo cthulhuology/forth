@@ -1,3 +1,5 @@
 #!/bin/bash
 
+echo "BITS 64" > test.asm
+echo "$@" >> test.asm
 yasm -m amd64 -o test test.asm && hexdump -C test
