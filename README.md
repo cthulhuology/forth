@@ -22,9 +22,11 @@ words.  From there the forth words will be defined in terms of these
 instructions.  This allows us to swap out instruction tables to port the
 forth to new processors with a little effort.
 
+<pre>
   +----+------------+
   | ## | bytes (12) |
   +----+------------+
+</pre>
 
 Each instruction just copies the bytes for the instruction inline to
 the exec region of memory.  A set of patch function are used to back
@@ -46,9 +48,11 @@ and it can be write protected for turnkey solutions.
 Finally, a separate lexicon region is used to store the dictionary. The
 lexicon consists of a length, a string, and an address:   
 
+<pre>
   +--------+--------------------------------+--------+
   |length  | string                         | addr   |
   +--------+--------------------------------+--------+
+</pre>
 
 The dictionary is search backwards so that you can redefine thing.  There's
 no smudge, and recursive definitions are allowed. Since the compiler will 
