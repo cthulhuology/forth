@@ -60,6 +60,7 @@ opc	10	$48 $b8 $00 $00 $00 $00 $00 $00 $00 $00 \	lit	mov rax,imm64
 opc	7	$48 $c7 $c0 $00 $00 $00 $00		\	lit32	mov rax,imm32
 
 	\ call / return
+opc	5	$e9 $00 $00 $00 $00 			\	loop	jmp imm32
 opc	5	$e8 $00 $00 $00 $00			\	word	call imm32
 opc	6	$0f $84 $00 $00 $00 $00			\	0=?	jz imm32
 opc	6	$0f $88 $00 $00 $00 $00			\	0<?	js imm32
@@ -177,7 +178,9 @@ opc	4	$4c $8b $4d $d8				\	arg6	mov r9,[rbp-40]
 
 create end-opcodes 0 ,
 
-\ fetch a bye from addr, and leave addr+1 and byte on stack
+\ fetch a bye from addr, and leave addr+1 and byte on stacklksf;;ZZ
+
+
 ICODE c@+ ( addr -- a+1 n )
 	PUSH(EBX)                      \ save addr on stack
 	0 [EBX] AL MOV                 \ read value from addr to tos
@@ -188,7 +191,7 @@ ICODE c@+ ( addr -- a+1 n )
 \ assembles an instruction given an opcode table index
 : ins ( n -- )
 	16 * opcodes + dup 4+ swap @	\ addr len
-	0 do c@+ c,exec loop ;
+	0 do c@+ c,exec loop drop ;
 
 \ patches the last byte
 : patch1 ( c -- )

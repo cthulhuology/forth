@@ -49,7 +49,7 @@ $FFFF constant ET_HIPROC
 : e-class ELFCLASS64 c, ;	\ table 3
 : e-data ELFDATA2LSB c, ;	\ table 4
 : e-version 1 c, ;
-: e-osabi ELOSABI_SYSV c, ;	\ table 5
+: e-osabi ELFOSABI_SYSV c, ;	\ table 5
 : e-abiver 0 c, ; 
 
 : e-pad 0 c, 0 c, 0 c, 0 c, 0 c, 0 c, 0 c, ;
@@ -79,7 +79,13 @@ $FFFF constant ET_HIPROC
 
 \ elf header
 
-: header 
+: elf-header ( 
+	shstrndx shnum shentsizze 
+	phnum phentsize 	
+	ehsize 
+	shoff_hi shoff_lo 
+	phoff_hi phoff_lo 
+	entry_hi entry_lo -- )
 	e_ident 
 	e_type
 	e_machine
@@ -88,8 +94,8 @@ $FFFF constant ET_HIPROC
 	e_phoff
 	e_shoff
 	e_flags
-	e_hsize
-	e_phensize
+	e_ehsize
+	e_phentsize
 	e_phnum	
 	e_shentsize
 	e_shnum
@@ -97,12 +103,12 @@ $FFFF constant ET_HIPROC
 
 \ table 7
 0 constant SHN_UNDEF \ Used to mark an undefined or meaningless section reference
-0xFF00 constant SHN_LOPROC \ Processor-specific use
-0xFF1F constant SHN_HIPROC
-0xFF20 constant SHN_LOOS \ Environment-specific use
-0xFF3F constant SHN_HIOS
-0xFFF1 constant SHN_ABS \ Indicates that the corresponding reference is an absolute value
-0xFFF2 constant SHN_COMMON \ Indicates a symbol that has been declared as a common block 
+$FF00 constant SHN_LOPROC \ Processor-specific use
+$FF1F constant SHN_HIPROC
+$FF20 constant SHN_LOOS \ Environment-specific use
+$FF3F constant SHN_HIOS
+$FFF1 constant SHN_ABS \ Indicates that the corresponding reference is an absolute value
+$FFF2 constant SHN_COMMON \ Indicates a symbol that has been declared as a common block 
 			\ (Fortran COMMON or C tentative declaration)
 
 \ table 8
@@ -124,11 +130,11 @@ $70000000 constant SHT_LOPROC \ Processor-specific use
 $7FFFFFFF constant SHT_HIPROC
 
 \ table 9
-0x1 constant SHF_WRITE \ Section contains writable data (W)
-0x2 constant SHF_ALLOC \ Section is allocated in memory image of program (A) 
-0x4 constant SHF_EXECINSTR \ Section contains executable instructions (X)
-0x0F000000 constant SHF_MASKOS \ Environment-specific use
-0xF0000000 constant SHF_MASKPROC \ Processor-specific use
+$1 constant SHF_WRITE \ Section contains writable data (W)
+$2 constant SHF_ALLOC \ Section is allocated in memory image of program (A) 
+$4 constant SHF_EXECINSTR \ Section contains executable instructions (X)
+$0F000000 constant SHF_MASKOS \ Environment-specific use
+$F0000000 constant SHF_MASKPROC \ Processor-specific use
 
 \ table 10
 \ SHT_DYNAMIC	String table used by entries in this section
@@ -179,11 +185,21 @@ $7FFFFFFF constant SHT_HIPROC
 : sh_addralign ( hi lo -- ) , , ; \ Elf64_Xword  Address  alignment  boundary  , power of two
 : sh_entsize ( hi lo -- ) , , ; \ Elf64_Xword  Size  of  entries,  or zero
 
-: section 
+: section  ( 
+	entsize_hi entsize_lo
+	addralign_hi addralign_lo
+	info link 
+	size_hi size_lo 
+	offset_hi offset_lo 
+	addr_hi addr_lo
+	flags_hi flags_lo
+	type name -- )
 	sh_name sh_type sh_flags
 	sh_addr 	sh_offset
 	sh_size		sh_link sh_info
 	sh_addralign	sh_entsize ;
+
+: first-section 0 0 0 0 0 0 0 0 0 0 0 0 0 0  section ;
 
 \ table 14
 0 constant STB_LOCAL \ Not visible outside the object file 
@@ -249,17 +265,22 @@ $FF000000 constant PF_MASKPROC \ These flag bits are reserved for processor-spec
 : p_flags , ; \ Elf64_Word Segment attributes table 17	5 in sample1 PF_X PF_R or, $04 in sample2 PF_R
 : p_offset ( hi lo -- ) , ,  ; \ Elf64_Off Offset in file	0 in sample1, $b0 in sample2 
 : p_vaddr  ( hi lo -- ) , , ; \ Elf64_Addr Virtual address in memory 	$400000 in sample1, $4000b0 in sample2
-: p_paddr ( -- ) 0 , 0 ,  ; \ Elf64_Addr Reserved  $400000 in sample1, $4000b0 in sample2
+: p_paddr ( -- ) , ,  ;	\ Elf64_Addr Reserved  $400000 in sample1, $4000b0 in sample2
 : p_filesz ( hi lo -- ) , ,  ; \ Elf64_Xword Size  of  segment  in  file $f0 in sample1, $24 in sample 2
 : p_memsz ( hi lo -- ) , ,  ; \ Elf64_Xword Size  of  segment  in  memory $f0 in sample1, $24 in sample 2
 : p_align ( hi lo -- ) , ,  ; \ Elf64_Xword Alignment  of  segment	$200000 in sample1, $04 in sample 2
 
-: program_header
+: program-header ( 
+	mem_align memsize filesize	
+	hi_paddr lo_paddr
+	hi_vaddr lo_vaddr
+	hi_offset lo_offset
+	flags type )
 	p_type p_flags
 	p_offset
 	p_vaddr
 	p_paddr
-	p_filez
+	p_filesz
 	p_memsz
 	p_align ;
 
