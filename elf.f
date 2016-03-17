@@ -289,3 +289,61 @@ $FF000000 constant PF_MASKPROC \ These flag bits are reserved for processor-spec
 
 : string-table
 	0 , ;	\ first string is alway null 0
+
+
+0 value elf-buffer
+0 value elf-size
+0 value elf-mem
+0 value elf-binary
+0 value elf-fd
+
+: elf ( addr size mem str u -- )
+	W/O create-file 
+	if ." failed to open file for writing" abort then 
+	to elf-fd
+	to elf-mem
+	to elf-size
+	to elf-binary
+	here to elf-buffer
+
+	\ elf header
+	0		\ shstrndx none
+	1		\ one section header for .text
+	$40		\ size of section header
+	1		\ one program header
+	$38		\ program header is $38 bytes long
+	$40		\ elf header is $40 bytes
+	0 $80		\ section header offset
+	0 $40		\ program header offset
+	0 $400100	\ entry point
+	elf-header
+
+	\ program header
+	0 $200000			\ align
+	0 $100 elf-size + elf-mem +	\ memsize
+	0 $100 elf-size +		\ filesize
+	0 $400000	\ paddr 
+	0 $400000	\ vaddr 
+	0 0 		\ offset (start of elf file)
+	PF_X PF_R or 	\ flags
+	PT_LOAD		\ type
+	program-header
+
+	0 , 0 , 	\ padding to $80
+
+	\ sections
+	first-section
+	0 0 		\ entsize
+	0 0		\ addr align
+	0 0		\ info link
+	0 elf-size	\ size
+	0 $100		\ offset
+	0 $400100	\ addr
+	0 SHF_ALLOC SHF_EXECINSTR or	\ flags
+	SHT_PROGBITS 0	\ type name
+	section
+	
+	\ write the file out
+	elf-buffer $100 elf-fd write-file
+	elf-binary elf-size elf-fd write-file
+	elf-fd close-file ;
