@@ -20,6 +20,7 @@
 \
 
 \ elf header entires
+empty
 
 \ table 3
 1 constant ELFCLASS32 \ 32-bit objects
@@ -199,7 +200,11 @@ $F0000000 constant SHF_MASKPROC \ Processor-specific use
 	sh_size		sh_link sh_info
 	sh_addralign	sh_entsize ;
 
-: first-section 0 0 0 0 0 0 0 0 0 0 0 0 0 0  section ;
+: empty-section 
+	0 0 0 0 
+	0 0 0 0 
+	0 0 0 0 
+	0 0 0 0 section ;
 
 \ table 14
 0 constant STB_LOCAL \ Not visible outside the object file 
@@ -282,7 +287,9 @@ $FF000000 constant PF_MASKPROC \ These flag bits are reserved for processor-spec
 	p_paddr
 	p_filesz
 	p_memsz
-	p_align ;
+	p_align 
+\	0 , 0 , 	\ padding to $40
+	;
 
 
 \ string table
@@ -293,18 +300,19 @@ $FF000000 constant PF_MASKPROC \ These flag bits are reserved for processor-spec
 
 0 value elf-buffer
 0 value elf-size
-0 value elf-mem
 0 value elf-binary
 0 value elf-fd
 
-: elf ( addr size mem str u -- )
+: elf-file ( addr size str u -- )
 	W/O create-file 
 	if ." failed to open file for writing" abort then 
 	to elf-fd
-	to elf-mem
 	to elf-size
 	to elf-binary
-	here to elf-buffer
+	here to elf-buffer ;
+
+: elf ( addr size str u -- )
+	elf-file
 
 	\ elf header
 	0		\ shstrndx none
@@ -313,26 +321,25 @@ $FF000000 constant PF_MASKPROC \ These flag bits are reserved for processor-spec
 	1		\ one program header
 	$38		\ program header is $38 bytes long
 	$40		\ elf header is $40 bytes
-	0 $80		\ section header offset
+	0 $e8		\ section header offset
 	0 $40		\ program header offset
 	0 $400100	\ entry point
 	elf-header
 
 	\ program header
-	0 $200000			\ align
-	0 $100 elf-size + elf-mem +	\ memsize
-	0 $100 elf-size +		\ filesize
+	0 $200000	\ align
+	0 $100 elf-size + \ memsize
+	0 $100 elf-size + \ filesize
 	0 $400000	\ paddr 
 	0 $400000	\ vaddr 
 	0 0 		\ offset (start of elf file)
-	PF_X PF_R or 	\ flags
+	PF_R or 	\ flags
 	PT_LOAD		\ type
 	program-header
 
-	0 , 0 , 	\ padding to $80
 
 	\ sections
-	first-section
+	empty-section
 	0 0 		\ entsize
 	0 0		\ addr align
 	0 0		\ info link
@@ -346,4 +353,249 @@ $FF000000 constant PF_MASKPROC \ These flag bits are reserved for processor-spec
 	\ write the file out
 	elf-buffer $100 elf-fd write-file
 	elf-binary elf-size elf-fd write-file
-	elf-fd close-file ;
+	elf-fd close-file drop ;
+
+
+: dyn ( val tag -- ) , , , , ;
+
+: dynamic-section  ( -- )	\ generate a 8 field dynamic section
+	0 , 0 , 0 , 0 ,
+	0 , 0 , 0 , 0 ,
+	0 , 0 , 0 , 0 ,
+	0 , 0 , 0 , 0 ,
+	0 , 0 , 0 , 0 ,
+	0 , 0 , 0 , 0 ,
+	0 , 0 , 0 , 0 ,
+	0 , 0 , 0 , 0 ,
+;
+
+0 value shstrtab	\ offset shstrtab vs strtab
+0 value dynstr		\ offset shstrtab vs strtab
+0 value end-dynstr
+0 value end-strtab
+
+create strtab 
+	0 c,
+	,z" /lib64/ld-linux-x86-64.so.2"	\ $1 27 this is the .interp section
+here 1- strtab - to shstrtab	\ shstrtab starts at trailing 0 of .interp section
+	,z" .text"		\ $01 5
+	,z" .bss"		\ $07 4
+	,z" .data"		\ $0c 5
+	,z" .shstrtab"		\ $12 9
+	,z" .dynamic"		\ $1c 8
+	,z" .dynstr"		\ $25 7
+	,z" .dynsym"		\ $2d 7
+	,z" .interp"		\ $35 7
+here 1- strtab - to dynstr	\ dynstr table starts at end of shstrtabs trailing 0
+	,z" libdl.so.2"		\ $01 10
+	,z" dlopen"		\ $0c 6	
+	,z" dlclose"		\ $13 5
+	,z" dlsym"		\ $1b 5
+	,z" dlerror"		\ $21 7
+here to end-dynstr
+	0 c, 0 c, 0 c, 0 c, 0 c, 0 c, 0 c,
+here to end-strtab
+
+: compile-strtab
+	strtab here end-strtab strtab - move 
+	 end-strtab strtab - allot ;
+
+\ symbol table stuff
+
+24 constant bytes/symbol
+6 constant #symbols
+
+: compile-symboltable
+	0 , 0 , 0 , 0 , 0 , 0 ,
+	0 , 0 , 0 , 0 , 0 , 0 ,
+	0 , 0 , 0 , 0 , 0 , 0 ,
+	0 , 0 , 0 , 0 , 0 , 0 ,
+	0 , 0 , 0 , 0 , 0 , 0 ,
+	0 , 0 , 0 , 0 , 0 , 0 , ;
+
+
+\ dynamically linked elf
+
+\ sections
+\ .interp .shstrtab .dynstr .dynsym .dynamic .data .text .bss
+9 constant #sections
+3 constant #physical
+$38 constant physical-size
+$40 constant header-size
+$80 constant dynamic-size
+
+header-size constant .physical-headers
+
+physical-size #physical * header-size + constant .section-headers
+
+end-strtab strtab - constant strtab-size
+
+header-size #sections * .section-headers + constant .dynamic
+
+.dynamic $80 + constant .strtab
+
+.strtab strtab-size + constant .symbols
+
+.symbols bytes/symbol #symbols * + constant .entry
+
+: dynelf ( adddr size str u -- )
+	elf-file
+
+	\ elf header
+	2			\ shstrndx 
+	#sections		\ section headers for 
+	header-size		\ size of section header
+	#physical		\ program headers INTERP LOAD DYNAMIC
+	physical-size		\ program header is $38 bytes long, but padded to $40
+	header-size		\ elf header is $40 bytes
+	0 .section-headers	\ section header offset,  3 ph + 1 elf header each $40
+	0 .physical-headers	\ program header offset
+	0 .entry		\ entry point 1 elf, 3 ph, 5 section 
+	elf-header
+
+	\ 3 program headers at $40
+
+	\ INTERP
+	0 $0			\ align
+	0 shstrtab 1-		\ memsize
+	0 shstrtab 1-		\ filesize
+	0 $3e9	 		\ paddr 
+	0 $3e9			\ vaddr 
+	0 $3e9			\ offset (start of elf file)
+	PF_X PF_R PF_W or or 	\ flags
+	PT_INTERP		\ type
+	program-header
+
+	\ TEXT  program header
+	0 $200000		\ align
+	0 .entry elf-size +	\ memsize
+	0 .entry elf-size + 	\ filesize
+	0 $0			\ paddr 
+	0 $0			\ vaddr 
+	0 0 			\ offset (start of elf file)
+	PF_X PF_R PF_W or or 	\ flags
+	PT_LOAD			\ type
+	program-header
+
+	\ DYNAMIC
+	0 $8			\ align
+	0 $80 			\ memsize
+	0 $80 			\ filesize 16 8 * 
+	0 .dynamic		\ paddr 
+	0 .dynamic		\ vaddr 
+	0 .dynamic		\ offset (start of elf file)
+	PF_X PF_R PF_W or or	\ flags
+	PT_DYNAMIC		\ type
+	program-header
+
+	\ 9 section headers
+	empty-section
+
+	\ .interp
+	0 0 			\ entsize
+	0 0			\ addr align
+	0 0			\ info link
+	0 shstrtab		\ size
+	0 .strtab		\ offset
+	0 .strtab		\ addr
+	0 SHF_ALLOC 		\ flags
+	SHT_PROGBITS $35	\ type name
+	section
+
+	\ .shstrtab
+	0 0 			\ entsize
+	0 0			\ addr align
+	0 0			\ info link
+	0 dynstr shstrtab -	\ size
+	0 .strtab shstrtab +	\ offset
+	0 .strtab shstrtab +	\ addr
+	0 SHF_ALLOC 		\ flags
+	SHT_STRTAB $12		\ type name
+	section
+
+	\ .dynstr 
+	0 0 			\ entsize
+	0 0			\ addr align
+	0 0			\ info link
+	0 end-dynstr dynstr -	\ size
+	0 .strtab dynstr +	\ offset
+	0 .strtab dynstr +	\ addr
+	0 SHF_ALLOC 		\ flags
+	SHT_STRTAB $25		\ type name
+	section
+
+	\ .dynsym
+	0 0 			\ entsize
+	0 0			\ addr align
+	0 0			\ info link
+	0 #symbols bytes/symbol *	\ size
+	0 .symbols		\ offset
+	0 .symbols		\ addr
+	0 SHF_ALLOC 		\ flags
+	SHT_SYMTAB $2d		\ type name
+	section
+
+	\ .dynamic
+	0 0 			\ entsize
+	0 0			\ addr align
+	0 0			\ info link
+	0 dynamic-size		\ size
+	0 .dynamic		\ offset
+	0 .dynamic		\ addr
+	0 SHF_ALLOC SHF_WRITE or \ flags
+	SHT_DYNAMIC $1c		\ type name
+	section
+
+	\ .text
+	0 0 			\ entsize
+	0 0			\ addr align
+	0 0			\ info link
+	0 .entry elf-size +	\ size
+	0 0			\ offset
+	0 0			\ addr
+	0 SHF_ALLOC 		\ flags
+	SHT_PROGBITS $01	\ type name
+	section
+	
+	\ .data 
+	0 0 			\ entsize
+	0 0			\ addr align
+	0 0			\ info link
+	0 $1000000		\ size
+	0 0			\ offset
+	0 $1000000		\ addr
+	0 SHF_ALLOC SHF_WRITE or \ flags
+	SHT_NOBITS $0c		\ type name
+	section
+
+	\ .bss
+	0 0 			\ entsize
+	0 0			\ addr align
+	0 0			\ info link
+	0 $100000		\ size
+	0 0			\ offset
+	0 $2000000		\ addr
+	0 SHF_ALLOC SHF_WRITE or \ flags
+	SHT_NOBITS $07		\ type name
+	section
+
+\ file contents, loaded by  phys 
+	\ dynamic section data
+	dynamic-section
+
+	\ compile (sh)strtab section at 
+	compile-strtab	
+
+	\ symboltab
+	compile-symboltable
+
+	\ hash table
+
+	\ rela
+
+	\ code 
+	elf-buffer .entry elf-fd write-file
+\	elf-binary elf-size elf-fd write-file
+	elf-fd close-file drop ;
+
+;
